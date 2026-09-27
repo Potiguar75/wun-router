@@ -26,7 +26,7 @@ def get_partners(
       PartnerLink(
           partner_name="Yoox",
           description="Moda firmata e design di tendenza",
-          url=f"https://www.yoox.com/it/donna",
+          url=f"http://www.yoox.com:80/it/donna/ricerca?dept=women&text=scarpe",
       ),
       PartnerLink(
           partner_name="ASOS",
