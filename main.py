@@ -1,15 +1,14 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from typing import Optional, List
 import urllib.parse
 
-app = FastAPI(title="WUN Universal Smart Intent Router", version="2.0")
+app = FastAPI(title="WUN Universal Multi-Partner Router", version="2.1")
 
-# Abilitiamo il CORS per permettere le chiamate dal frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In produzione puoi restringere al dominio del frontend
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -18,68 +17,140 @@ app.add_middleware(
 class RouteRequest(BaseModel):
     category: str
     budget: float
-    # Campi dinamici per le categorie avanzate
-    sub_type: Optional[str] = None      # Es. Affitto/Vendita per case, Hotel/Volo per viaggi
-    location: Optional[str] = None      # Località o destinazione
-    custom_query: Optional[str] = None  # Specifiche libere o modello
-    extra_filter: Optional[str] = None  # Filtri rapidi opzionali
+    sub_type: Optional[str] = None      # Es. Affitto / Vendita
+    location: Optional[str] = None      # Località / Destinazione
+    custom_query: Optional[str] = None  # Specifiche libere
     accepted_disclaimer: bool
     accepted_privacy: bool
 
-@app.post("/api/v1/route")
+class PartnerLink(BaseModel):
+    partner_name: str
+    description: str
+    url: str
+
+class RouteResponse(BaseModel):
+    status: str
+    category: str
+    summary_intent: str
+    partners: List[PartnerLink]
+
+@app.post("/api/v1/route", response_model=RouteResponse)
 async def route_intent(req: RouteRequest):
     if not req.accepted_disclaimer or not req.accepted_privacy:
         raise HTTPException(status_code=400, detail="È necessario accettare i termini di orientamento e privacy.")
 
     category_lower = req.category.lower()
-    
-    # Dizionario o logica di mappatura per i diversi verticali
-    target_merchant = "Generale"
-    redirect_url = "https://www.google.com"
+    partners = []
 
-    # 1. CATEGORIA: IMMOBILI / CASE
+    # 1. IMMOBILI / CASE (Multi-partner: Immobiliare, Idealista, Casa.it)
     if "casa" in category_lower or "immobili" in category_lower:
-        target_merchant = "Portale Immobiliare Partner"
-        loc = urllib.parse.quote(req.location or "Italia")
-        tipo = urllib.parse.quote(req.sub_type or "vendita")
-        # Esempio di generazione link di ricerca mirata
-        redirect_url = f"https://www.immobiliare.it/vendita-case/{loc}/?maxPrice={req.budget}"
-        if "affitto" in req.sub_type.lower():
-            redirect_url = f"https://www.immobiliare.it/affitto-case/{loc}/?maxPrice={req.budget}"
+        loc = urllib.parse.quote(req.location or "italia")
+        tipo = req.sub_type or "vendita"
+        
+        partners = [
+            PartnerLink(
+                partner_name="Immobiliare.it",
+                description=f"Ricerca mirata ({tipo}) a {req.location} entro i {req.budget}€",
+                url=f"https://www.immobiliare.it/risultati-ricerca/?criterio=rilevanza&tipoContratto={1 if tipo=='vendita' else 2}&prezzoMassimo={int(req.budget)}&s={loc}"
+            ),
+            PartnerLink(
+                partner_name="Idealista",
+                description=f"Annunci verificati di case in {tipo} nella zona",
+                url=f"https://www.idealista.it/collezioni/{loc}-{tipo}/con-prezzo_max_{int(req.budget)}"
+            ),
+            PartnerLink(
+                partner_name="Casa.it",
+                description=f"Network nazionale immobiliare per {req.location}",
+                url=f"https://www.casa.it/vendita/residenziale/{loc}/?prezzoMax={int(req.budget)}" if tipo=='vendita' else f"https://www.casa.it/affitto/residenziale/{loc}/?prezzoMax={int(req.budget)}"
+            )
+        ]
 
-    # 2. CATEGORIA: AUTOMOTIVE / AUTO & MOTO
+    # 2. AUTO & MOTO (Multi-partner: AutoScout24, Subito, AutoHero)
     elif "auto" in category_lower or "moto" in category_lower:
-        target_merchant = "Portale Automotive Partner"
         query = urllib.parse.quote(req.custom_query or req.category)
-        redirect_url = f"https://www.autoscout24.it/lst/{query}?priceto={req.budget}"
+        partners = [
+            PartnerLink(
+                partner_name="AutoScout24",
+                description=f"Il marketplace europeo n.1 per {req.custom_query}",
+                url=f"https://www.autoscout24.it/lst/{query}?priceto={int(req.budget)}"
+            ),
+            PartnerLink(
+                partner_name="Subito.it",
+                description="Annunci diretti da privati e concessionari",
+                url=f"https://www.subito.it/annunci-italia/vendita/usato/?q={query}&ps={int(req.budget)}"
+            ),
+            PartnerLink(
+                partner_name="Autohero",
+                description="Auto ricondizionate con garanzia e consegna a domicilio",
+                url=f"https://www.autohero.com/it/search/?priceMax={int(req.budget)}"
+            )
+        ]
 
-    # 3. CATEGORIA: VIAGGI & HOTEL / ALBERGHI
-    elif "viaggi" in category_lower or "hotel" in category_lower or "alberghi" in category_lower:
-        target_merchant = "Booking & Travel Partner"
+    # 3. VIAGGI & HOTEL (Multi-partner: Booking, Expedia, Airbnb)
+    elif "viaggi" in category_lower or "hotel" in category_lower:
         dest = urllib.parse.quote(req.location or "Europa")
-        redirect_url = f"https://www.booking.com/searchresults.html?ss={dest}&budget={req.budget}"
+        partners = [
+            PartnerLink(
+                partner_name="Booking.com",
+                description=f"Migliori tariffe alberghiere a {req.location}",
+                url=f"https://www.booking.com/searchresults.html?ss={dest}&price_max=val_{int(req.budget)}"
+            ),
+            PartnerLink(
+                partner_name="Expedia",
+                description="Offerte pacchetti volo + hotel",
+                url=f"https://www.expedia.it/Abitazioni-{dest}.d602055.Guida-Viaggi?maxPrice={int(req.budget)}"
+            ),
+            PartnerLink(
+                partner_name="Airbnb",
+                description=f"Case vacanza uniche a {req.location}",
+                url=f"https://www.airbnb.it/s/{dest}/homes?price_max={int(req.budget)}"
+            )
+        ]
 
-    # 4. CATEGORIA: TECH & ELETTRONICA (E-commerce)
+    # 4. TECH & ELETTRONICA (Multi-partner: Amazon, Trovaprezzi, eBay)
     elif "tech" in category_lower or "elettronica" in category_lower:
-        target_merchant = "Amazon Associates / Tech Partner"
-        query = urllib.parse.quote(req.custom_query or "smartphone pc")
-        # Inserisci qui il tuo tag di affiliazione reale (es. &tag=tuotag-21)
-        redirect_url = f"https://www.amazon.it/s?k={query}&rh=p_36%3A-{int(req.budget * 100)}&tag=wun03-21"
+        query = urllib.parse.quote(req.custom_query or "elettronica")
+        partners = [
+            PartnerLink(
+                partner_name="Amazon IT",
+                description="Spedizione rapida e garanzia Prime (con tag affiliato)",
+                url=f"https://www.amazon.it/s?k={query}&rh=p_36%3A-{int(req.budget * 100)}&tag=wun03-21"
+            ),
+            PartnerLink(
+                partner_name="Trovaprezzi.it",
+                description="Comparatore prezzi ufficiale e negozi certificati",
+                url=f"https://www.trovaprezzi.it/prezzo_prodotti-chiave.aspx?q={query}&prezzomax={int(req.budget)}"
+            ),
+            PartnerLink(
+                partner_name="eBay",
+                description="Offerte e aste tech imperdibili",
+                url=f"https://www.ebay.it/sch/i.html?_nkw={query}&_udmax={int(req.budget)}"
+            )
+        ]
 
-    # 5. CATEGORIA: ALTRO / GENERALE (Fallback universale)
+    # 5. ALTRO / GENERALE
     else:
-        target_merchant = "Network Partner Multi-Categoria"
         query = urllib.parse.quote(req.custom_query or req.category)
-        redirect_url = f"https://www.trovaprezzi.it/prezzo_prodotti-chiave.aspx?q={query}"
+        partners = [
+            PartnerLink(
+                partner_name="Trovaprezzi Universale",
+                description="Motore di ricerca prezzi multi-categoria",
+                url=f"https://www.trovaprezzi.it/prezzo_prodotti-chiave.aspx?q={query}&prezzomax={int(req.budget)}"
+            ),
+            PartnerLink(
+                partner_name="Google Shopping",
+                description="Esplora tutte le opzioni di mercato",
+                url=f"https://www.google.com/search?q={query}+max+{int(req.budget)}&tbm=shop"
+            )
+        ]
 
-    return {
-        "status": "success",
-        "category": req.category,
-        "merchant_target": target_merchant,
-        "redirect_url": redirect_url,
-        "privacy_verified": True
-    }
+    return RouteResponse(
+        status="success",
+        category=req.category,
+        summary_intent=f"Ricerca per {req.category} (Budget max: {req.budget}€)",
+        partners=partners
+    )
 
 @app.get("/")
 def health_check():
-    return {"status": "WUN Universal Router is online", "version": "2.0"}
+    return {"status": "WUN Multi-Partner Router is online", "version": "2.1"}
