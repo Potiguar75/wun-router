@@ -3,17 +3,19 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# Import diretto dei moduli presenti nella stessa cartella principale
-import automotive
-import fashion
-import finance
-import general
-import hobby
-import home_living
-import jobs
-import real_estate
-import tech
-import travel
+# Import corretto dei moduli dalla cartella router
+from router import (
+    automotive,
+    fashion,
+    finance,
+    general,
+    hobby,
+    home_living,
+    jobs,
+    real_estate,
+    tech,
+    travel,
+)
 
 app = FastAPI(title="WUN Universal Intent Router", version="3.0")
 
@@ -113,4 +115,4 @@ async def route_intent(req: RouteRequest):
 
 @app.get("/")
 def health_check():
-  return {"status": "WUN Flat Router is online", "version": "3.0"}
+  return {"status": "WUN Router is online", "version": "3.0"}
