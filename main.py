@@ -3,12 +3,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# Import diretto dei moduli nella stessa cartella principale
+# Import corretto (hobbies con la 's')
 import automotive
 import fashion
 import finance
 import general
-import hobby
+import hobbies
 import home_living
 import jobs
 import real_estate
@@ -75,7 +75,7 @@ async def route_intent(req: RouteRequest):
         req.budget, req.sub_type, req.location, req.custom_query
     )
   elif "hobby" in cat_lower:
-    partners = hobby.get_partners(
+    partners = hobbies.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
     )
   elif "auto" in cat_lower or "moto" in cat_lower:
