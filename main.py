@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # Import dei moduli router
-from routers import (
+from router import (
     automotive,
     fashion,
     finance,
