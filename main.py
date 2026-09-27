@@ -1,57 +1,85 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Dict, Any
+import urllib.parse
 
-app = FastAPI(
-    title="WUN (What You Need) - Intent Router",
-    version="1.0.0",
-    description="Middleware di Intent-Routing sicuro e senza memorizzazione di dati sensibili."
-)
+app = FastAPI(title="WUN Universal Smart Intent Router", version="2.0")
 
-# Configurazione CORS per permettere al widget frontend di comunicare senza blocchi
+# Abilitiamo il CORS per permettere le chiamate dal frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["*"],  # In produzione puoi restringere al dominio del frontend
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-class SearchRequest(BaseModel):
+class RouteRequest(BaseModel):
     category: str
-    custom_query: Optional[str] = None
     budget: float
-    extra_filter: Optional[str] = None
+    # Campi dinamici per le categorie avanzate
+    sub_type: Optional[str] = None      # Es. Affitto/Vendita per case, Hotel/Volo per viaggi
+    location: Optional[str] = None      # Località o destinazione
+    custom_query: Optional[str] = None  # Specifiche libere o modello
+    extra_filter: Optional[str] = None  # Filtri rapidi opzionali
     accepted_disclaimer: bool
     accepted_privacy: bool
 
-@app.get("/")
-def health_check():
-    return {"status": "WUN Engine is online and ready.", "mode": "Middleware Intent-Routing"}
-
 @app.post("/api/v1/route")
-def process_intent(payload: SearchRequest):
-    # Controllo di sicurezza rigoroso sulle spunte legali obbligatorie
-    if not payload.accepted_disclaimer or not payload.accepted_privacy:
-        raise HTTPException(
-            status_code=400,
-            detail="Accesso negato: è obbligatorio accettare il disclaimer e la privacy policy per la protezione dei dati."
-        )
+async def route_intent(req: RouteRequest):
+    if not req.accepted_disclaimer or not req.accepted_privacy:
+        raise HTTPException(status_code=400, detail="È necessario accettare i termini di orientamento e privacy.")
+
+    category_lower = req.category.lower()
     
-    # Determina la query di ricerca finale
-    query_term = payload.custom_query if payload.category.lower() == "altro" and payload.custom_query else payload.category
-    if payload.extra_filter:
-        query_term = f"{query_term} {payload.extra_filter}"
-    
-    # Formattazione per la ricerca sul merchant partner
-    formatted_query = query_term.replace(" ", "+")
-    redirect_url = f"https://www.amazon.it/s?k={formatted_query}&tag=iltuonome-21"
-    
+    # Dizionario o logica di mappatura per i diversi verticali
+    target_merchant = "Generale"
+    redirect_url = "https://www.google.com"
+
+    # 1. CATEGORIA: IMMOBILI / CASE
+    if "casa" in category_lower or "immobili" in category_lower:
+        target_merchant = "Portale Immobiliare Partner"
+        loc = urllib.parse.quote(req.location or "Italia")
+        tipo = urllib.parse.quote(req.sub_type or "vendita")
+        # Esempio di generazione link di ricerca mirata
+        redirect_url = f"https://www.immobiliare.it/vendita-case/{loc}/?maxPrice={req.budget}"
+        if "affitto" in req.sub_type.lower():
+            redirect_url = f"https://www.immobiliare.it/affitto-case/{loc}/?maxPrice={req.budget}"
+
+    # 2. CATEGORIA: AUTOMOTIVE / AUTO & MOTO
+    elif "auto" in category_lower or "moto" in category_lower:
+        target_merchant = "Portale Automotive Partner"
+        query = urllib.parse.quote(req.custom_query or req.category)
+        redirect_url = f"https://www.autoscout24.it/lst/{query}?priceto={req.budget}"
+
+    # 3. CATEGORIA: VIAGGI & HOTEL / ALBERGHI
+    elif "viaggi" in category_lower or "hotel" in category_lower or "alberghi" in category_lower:
+        target_merchant = "Booking & Travel Partner"
+        dest = urllib.parse.quote(req.location or "Europa")
+        redirect_url = f"https://www.booking.com/searchresults.html?ss={dest}&budget={req.budget}"
+
+    # 4. CATEGORIA: TECH & ELETTRONICA (E-commerce)
+    elif "tech" in category_lower or "elettronica" in category_lower:
+        target_merchant = "Amazon Associates / Tech Partner"
+        query = urllib.parse.quote(req.custom_query or "smartphone pc")
+        # Inserisci qui il tuo tag di affiliazione reale (es. &tag=tuotag-21)
+        redirect_url = f"https://www.amazon.it/s?k={query}&rh=p_36%3A-{int(req.budget * 100)}&tag=wun03-21"
+
+    # 5. CATEGORIA: ALTRO / GENERALE (Fallback universale)
+    else:
+        target_merchant = "Network Partner Multi-Categoria"
+        query = urllib.parse.quote(req.custom_query or req.category)
+        redirect_url = f"https://www.trovaprezzi.it/prezzo_prodotti-chiave.aspx?q={query}"
+
     return {
         "status": "success",
-        "intent_processed": query_term,
-        "merchant_target": "Amazon Ufficiale (Accreditato)",
+        "category": req.category,
+        "merchant_target": target_merchant,
         "redirect_url": redirect_url,
-        "notice": "Il cliente viene reindirizzato in autonomia. WUN non gestisce pagamenti o dati personali."
+        "privacy_verified": True
     }
+
+@app.get("/")
+def health_check():
+    return {"status": "WUN Universal Router is online", "version": "2.0"}
