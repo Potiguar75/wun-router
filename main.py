@@ -3,7 +3,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# Import corretto (hobbies con la 's')
+# Import diretto dei moduli nella cartella principale
 import automotive
 import fashion
 import finance
@@ -49,6 +49,33 @@ class RouteResponse(BaseModel):
   partners: List[PartnerLink]
 
 
+def normalize_partners(raw_partners):
+  """Converte in modo sicuro qualsiasi formato arrivi dai file di categoria
+
+  in dizionari compatibili con Pydantic.
+  """
+  normalized = []
+  if not raw_partners:
+    return normalized
+
+  for p in raw_partners:
+    if isinstance(p, dict):
+      normalized.append({
+          "partner_name": p.get("partner_name", p.get("name", "Partner")),
+          "description": p.get("description", ""),
+          "url": p.get("url", "#"),
+      })
+    else:
+      normalized.append({
+          "partner_name": getattr(
+              p, "partner_name", getattr(p, "name", "Partner")
+          ),
+          "description": getattr(p, "description", ""),
+          "url": getattr(p, "url", "#"),
+      })
+  return normalized
+
+
 @app.post("/api/v1/route", response_model=RouteResponse)
 async def route_intent(req: RouteRequest):
   if not req.accepted_disclaimer or not req.accepted_privacy:
@@ -60,48 +87,50 @@ async def route_intent(req: RouteRequest):
     )
 
   cat_lower = req.category.lower()
-  partners = []
+  raw_partners = []
 
   if "casa & immobili" in cat_lower:
-    partners = real_estate.get_partners(
+    raw_partners = real_estate.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
     )
   elif "arredamento" in cat_lower:
-    partners = home_living.get_partners(
+    raw_partners = home_living.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
     )
   elif "abbigliamento" in cat_lower:
-    partners = fashion.get_partners(
+    raw_partners = fashion.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
     )
   elif "hobby" in cat_lower:
-    partners = hobbies.get_partners(
+    raw_partners = hobbies.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
     )
   elif "auto" in cat_lower or "moto" in cat_lower:
-    partners = automotive.get_partners(
+    raw_partners = automotive.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
     )
   elif "viaggi" in cat_lower or "hotel" in cat_lower:
-    partners = travel.get_partners(
+    raw_partners = travel.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
     )
   elif "tech" in cat_lower or "elettronica" in cat_lower:
-    partners = tech.get_partners(
+    raw_partners = tech.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
     )
   elif "finanza" in cat_lower or "assicurazioni" in cat_lower:
-    partners = finance.get_partners(
+    raw_partners = finance.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
     )
   elif "lavoro" in cat_lower or "formazione" in cat_lower:
-    partners = jobs.get_partners(
+    raw_partners = jobs.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
     )
   else:
-    partners = general.get_partners(
+    raw_partners = general.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
     )
+
+  partners = normalize_partners(raw_partners)
 
   return RouteResponse(
       status="success",
