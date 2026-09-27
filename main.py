@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from typing import Optional, List
 import urllib.parse
 
-app = FastAPI(title="WUN Universal Multi-Partner Router", version="2.1")
+app = FastAPI(title="WUN Universal Multi-Partner Router", version="2.3")
 
 app.add_middleware(
     CORSMiddleware,
@@ -17,8 +17,8 @@ app.add_middleware(
 class RouteRequest(BaseModel):
     category: str
     budget: float
-    sub_type: Optional[str] = None      # Es. Affitto / Vendita
-    location: Optional[str] = None      # Località / Destinazione
+    sub_type: Optional[str] = None      # Affitto / Vendita
+    location: Optional[str] = None      # Località o Città
     custom_query: Optional[str] = None  # Specifiche libere
     accepted_disclaimer: bool
     accepted_privacy: bool
@@ -42,30 +42,41 @@ async def route_intent(req: RouteRequest):
     category_lower = req.category.lower()
     partners = []
 
-    # 1. IMMOBILI / CASE (Multi-partner: Immobiliare, Idealista, Casa.it)
+    # 1. IMMOBILI / CASE
     if "casa" in category_lower or "immobili" in category_lower:
-        loc = urllib.parse.quote(req.location or "italia")
+        loc_raw = (req.location or "italia").strip().lower()
+        loc_slug = loc_raw.replace(" ", "-")
         tipo = req.sub_type or "vendita"
         
+        # URL corretto per Immobiliare.it (es. /affitto-case/trento/ o /vendita-case/trento/)
+        imm_url = f"https://www.immobiliare.it/{'vendita' if tipo=='vendita' else 'affitto'}-case/{loc_slug}/?prezzoMassimo={int(req.budget)}"
+        
+        # URL corretto per Idealista (es. /affitto-case/trento-trento/con-prezzo_max_.../)
+        idealista_loc = f"{loc_slug}-{loc_slug}"
+        idealista_url = f"https://www.idealista.it/{'affitto' if tipo=='affitto' else 'vendita'}-case/{idealista_loc}/con-prezzo_max_{int(req.budget)}/"
+        
+        # Casa.it (lasciato intatto come da tua richiesta)
+        casa_url = f"https://www.casa.it/{'vendita' if tipo=='vendita' else 'affitto'}/residenziale/{loc_slug}/?prezzoMax={int(req.budget)}"
+
         partners = [
             PartnerLink(
                 partner_name="Immobiliare.it",
                 description=f"Ricerca mirata ({tipo}) a {req.location} entro i {req.budget}€",
-                url=f"https://www.immobiliare.it/risultati-ricerca/?criterio=rilevanza&tipoContratto={1 if tipo=='vendita' else 2}&prezzoMassimo={int(req.budget)}&s={loc}"
+                url=imm_url
             ),
             PartnerLink(
                 partner_name="Idealista",
                 description=f"Annunci verificati di case in {tipo} nella zona",
-                url=f"https://www.idealista.it/collezioni/{loc}-{tipo}/con-prezzo_max_{int(req.budget)}"
+                url=idealista_url
             ),
             PartnerLink(
                 partner_name="Casa.it",
                 description=f"Network nazionale immobiliare per {req.location}",
-                url=f"https://www.casa.it/vendita/residenziale/{loc}/?prezzoMax={int(req.budget)}" if tipo=='vendita' else f"https://www.casa.it/affitto/residenziale/{loc}/?prezzoMax={int(req.budget)}"
+                url=casa_url
             )
         ]
 
-    # 2. AUTO & MOTO (Multi-partner: AutoScout24, Subito, AutoHero)
+    # 2. AUTO & MOTO
     elif "auto" in category_lower or "moto" in category_lower:
         query = urllib.parse.quote(req.custom_query or req.category)
         partners = [
@@ -86,7 +97,7 @@ async def route_intent(req: RouteRequest):
             )
         ]
 
-    # 3. VIAGGI & HOTEL (Multi-partner: Booking, Expedia, Airbnb)
+    # 3. VIAGGI & HOTEL
     elif "viaggi" in category_lower or "hotel" in category_lower:
         dest = urllib.parse.quote(req.location or "Europa")
         partners = [
@@ -107,13 +118,13 @@ async def route_intent(req: RouteRequest):
             )
         ]
 
-    # 4. TECH & ELETTRONICA (Multi-partner: Amazon, Trovaprezzi, eBay)
+    # 4. TECH & ELETTRONICA
     elif "tech" in category_lower or "elettronica" in category_lower:
         query = urllib.parse.quote(req.custom_query or "elettronica")
         partners = [
             PartnerLink(
                 partner_name="Amazon IT",
-                description="Spedizione rapida e garanzia Prime (con tag affiliato)",
+                description="Spedizione rapida e garanzia Prime",
                 url=f"https://www.amazon.it/s?k={query}&rh=p_36%3A-{int(req.budget * 100)}&tag=wun03-21"
             ),
             PartnerLink(
@@ -153,4 +164,4 @@ async def route_intent(req: RouteRequest):
 
 @app.get("/")
 def health_check():
-    return {"status": "WUN Multi-Partner Router is online", "version": "2.1"}
+    return {"status": "WUN Multi-Partner Router is online", "version": "2.3"}
