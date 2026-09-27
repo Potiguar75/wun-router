@@ -3,19 +3,17 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# Import corretto dei moduli dalla cartella router
-from router import (
-    automotive,
-    fashion,
-    finance,
-    general,
-    hobby,
-    home_living,
-    jobs,
-    real_estate,
-    tech,
-    travel,
-)
+# Import diretto dei moduli nella stessa cartella principale
+import automotive
+import fashion
+import finance
+import general
+import hobby
+import home_living
+import jobs
+import real_estate
+import tech
+import travel
 
 app = FastAPI(title="WUN Universal Intent Router", version="3.0")
 
