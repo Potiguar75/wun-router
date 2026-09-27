@@ -3,21 +3,19 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
-# Import dei moduli router
-from routers import (
-    automotive,
-    fashion,
-    finance,
-    general,
-    hobbies,
-    home_living,
-    jobs,
-    real_estate,
-    tech,
-    travel,
-)
+# Import diretto dei moduli presenti nella stessa cartella principale
+import automotive
+import fashion
+import finance
+import general
+import hobby
+import home_living
+import jobs
+import real_estate
+import tech
+import travel
 
-app = FastAPI(title="WUN Modular Universal Intent Router", version="3.0")
+app = FastAPI(title="WUN Universal Intent Router", version="3.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -64,7 +62,6 @@ async def route_intent(req: RouteRequest):
   cat_lower = req.category.lower()
   partners = []
 
-  # Smistamento basato sulla categoria scelta
   if "casa & immobili" in cat_lower:
     partners = real_estate.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
@@ -78,7 +75,7 @@ async def route_intent(req: RouteRequest):
         req.budget, req.sub_type, req.location, req.custom_query
     )
   elif "hobby" in cat_lower:
-    partners = hobbies.get_partners(
+    partners = hobby.get_partners(
         req.budget, req.sub_type, req.location, req.custom_query
     )
   elif "auto" in cat_lower or "moto" in cat_lower:
@@ -116,4 +113,4 @@ async def route_intent(req: RouteRequest):
 
 @app.get("/")
 def health_check():
-  return {"status": "WUN Modular Router is online", "version": "3.0"}
+  return {"status": "WUN Flat Router is online", "version": "3.0"}
