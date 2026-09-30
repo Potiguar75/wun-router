@@ -22,7 +22,8 @@ def get_partners(
 
   imm_url = f"https://www.immobiliare.it/{'vendita' if tipo=='vendita' else 'affitto'}-case/{loc_slug}/?prezzoMassimo={budget_int}"
   idealista_loc = f"{loc_slug}-{loc_slug}"
-  idealista_url = f"https://www.idealista.it/{'affitto' if tipo=='affitto' else 'vendita'}-case/{idealista_loc}/con-prezzo_max_{budget_int}/"
+  # CORRETTO: rimosso "_max_" per accettare qualsiasi prezzo dinamico
+  idealista_url = f"https://www.idealista.it/{'affitto' if tipo=='affitto' else 'vendita'}-case/{idealista_loc}/con-prezzo_{budget_int}/"
   casa_url = f"https://www.casa.it/{'vendita' if tipo=='vendita' else 'affitto'}/residenziale/{loc_slug}/?prezzoMax={budget_int}"
 
   return [
@@ -42,3 +43,5 @@ def get_partners(
           url=casa_url,
       ),
   ]
+```[cite: 2]
+
